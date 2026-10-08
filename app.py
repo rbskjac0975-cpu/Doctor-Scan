@@ -8,11 +8,33 @@ from ds_broker_yf import YFinanceBroker
 from ds_universe import SYMBOLS
 
 st.set_page_config("DOCTOR SCAN", "🩺", layout="wide")
-st.markdown("""<style>.stApp{background:#0b0f17}[data-testid=stSidebar]{background:#0e1420}
+st.markdown("""<style>
+:root{color-scheme:dark}
+.stApp,[data-testid=stHeader],[data-testid=stToolbar]{background:#0b0f17 !important}
+[data-testid=stSidebar],[data-testid=stSidebar]>div{background:#0e1420 !important}
+.stApp,.stApp p,.stApp span,.stApp label,.stApp li,.stApp h1,.stApp h2,.stApp h3,.stApp h4,.stApp h5,.stApp h6,
+[data-testid=stMarkdownContainer] *,[data-testid=stWidgetLabel] *,[data-testid=stMetricLabel] *,[data-testid=stMetricValue],
+[data-testid=stCaptionContainer] *,[data-testid=stSidebar] *{color:#e5e7eb !important}
+[data-testid=stCaptionContainer] *{color:#9ca3af !important}
+div[data-baseweb=select]>div,div[data-baseweb=input]>div,input,textarea{background:#1a2233 !important;color:#e5e7eb !important}
+div[data-baseweb=select] *{color:#e5e7eb !important}
+[data-baseweb=popover] *,[data-baseweb=menu] *{background:#1a2233 !important;color:#e5e7eb !important}
+button{color:#e5e7eb !important}
 .pill{padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600}
-.mock{background:#5a3d00;color:#ffc857}.live{background:#0d3b24;color:#3ddc84}.dead{background:#4a1515;color:#ff6b6b}
+.stApp .mock{background:#5a3d00;color:#ffc857 !important}.stApp .live{background:#0d3b24;color:#3ddc84 !important}.stApp .dead{background:#4a1515;color:#ff6b6b !important}
 .card{border:1px solid #243049;border-radius:10px;padding:10px 12px;margin-bottom:8px;background:#111827}
-.up{color:#3ddc84}.dn{color:#ff6b6b}.mono{font-family:ui-monospace,monospace}</style>""", unsafe_allow_html=True)
+.stApp .up{color:#3ddc84 !important}.stApp .dn{color:#ff6b6b !important}.mono{font-family:ui-monospace,monospace}</style>""", unsafe_allow_html=True)
+
+def _style(fig, h=320):
+    fig.update_layout(template="plotly_dark", height=h, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                      margin=dict(l=0, r=0, t=10, b=0), showlegend=False)
+    return fig
+def bar(series, box=st):
+    s_ = pd.Series(series)
+    box.plotly_chart(_style(go.Figure(go.Bar(x=s_.index.astype(str), y=s_.values, marker_color="#3b82f6"))), use_container_width=True)
+def line(series, box=st):
+    s_ = pd.Series(series)
+    box.plotly_chart(_style(go.Figure(go.Scatter(x=list(range(len(s_))), y=s_.values, mode="lines", line_color="#3ddc84"))), use_container_width=True)
 
 @st.cache_resource
 def get_broker():
@@ -135,10 +157,10 @@ elif page == "Market Breadth":
     st.metric("Mood", b["mood"], f"breadth score {b['score']:.0f}/100")
     st.write(f"Advances **{b['advances']}** · Declines **{b['declines']}** · Unchanged **{b['unchanged']}** · A/D **{b['ad_ratio']:.2f}** · "
              f"{b['pct_adv']:.0f}% advancing / {b['pct_dec']:.0f}% declining")
-    st.bar_chart(pd.Series(dict(Advances=b["advances"], Declines=b["declines"], Unchanged=b["unchanged"])))
+    bar(dict(Advances=b["advances"], Declines=b["declines"], Unchanged=b["unchanged"]))
 
 elif page == "Sectors":
-    st.dataframe(ctx["sectors"].round(2), use_container_width=True); st.bar_chart(ctx["sectors"]["score"])
+    st.dataframe(ctx["sectors"].round(2), use_container_width=True); bar(ctx["sectors"]["score"])
 
 elif page == "Options":
     s = st.selectbox("Symbol", df.symbol)
@@ -163,7 +185,7 @@ elif page == "Stock Detail":
     fig.update_layout(template="plotly_dark", height=450, xaxis_rangeslider_visible=False, margin=dict(l=0, r=0, t=10, b=0))
     st.plotly_chart(fig, use_container_width=True)
     a, bb = st.columns(2)
-    a.subheader("Score breakdown"); a.bar_chart(pd.Series(r.components)); a.caption(r.explanation + (f" Filtered: {r.reject}" if r.reject else ""))
+    a.subheader("Score breakdown"); bar(pd.Series(r.components), a); a.caption(r.explanation + (f" Filtered: {r.reject}" if r.reject else ""))
     rk = E.risk_levels(r.ltp, int(r.d), dict(high=r.orb_high, low=r.orb_low), r.vwap, r.atr)
     bb.subheader("Indicative risk levels"); bb.json({k: round(v, 2) if isinstance(v, float) else v for k, v in rk.items()})
     st.caption("*Conviction is a model-confidence index, not a probability of profit. Levels are indicative, not guaranteed.")
@@ -188,7 +210,7 @@ elif page == "Analytics":
         m[4].metric("Target hit", f"{100 * (done.status == 'TARGET').mean():.0f}%" if len(done) else "n/a")
         st.caption(f"Methodology: stored scanner signals, status judged on polled prices (not tick-accurate). Sample size: {len(h)} signals, {len(done)} resolved. "
                    f"Sources: {', '.join(h.source.unique())}.")
-        a, c = st.columns(2); a.bar_chart(h.groupby("hour").size()); c.bar_chart(h.score.value_counts().sort_index())
+        a, c = st.columns(2); bar(h.groupby("hour").size(), a); bar(h.score.value_counts().sort_index(), c)
 
 elif page == "Backtest":
     with st.form("bt"):
@@ -207,7 +229,7 @@ elif page == "Backtest":
                 k = st.columns(4); k[0].metric("Net P&L", f"₹{m['net_pnl']:,.0f}"); k[1].metric("Win rate", f"{m['win_rate']:.0f}%")
                 k[2].metric("Profit factor", f"{m['profit_factor']:.2f}"); k[3].metric("Max drawdown", f"₹{m['max_drawdown']:,.0f}")
                 st.write(f"Trades {m['trades']} · Avg R {m['avg_r']:.2f} · Expectancy ₹{m['expectancy']:,.0f}/trade")
-                st.line_chart(t.pnl.cumsum().reset_index(drop=True)); st.dataframe(t)
+                line(t.pnl.cumsum().reset_index(drop=True)); st.dataframe(t)
             st.caption(f"Methodology: ORB close-outside + RVOL + VWAP filter, fill at next bar open, stop-first on same-bar hits, EOD exit, "
                        f"1% risk sizing on ₹1L. Sample: {len(t)} trades / {ns} symbols / {n} sessions. "
                        + ("SIMULATED data — results are meaningless for real trading." if broker.is_mock else "Historical results do not predict future results."))
