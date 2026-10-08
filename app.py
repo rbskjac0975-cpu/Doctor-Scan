@@ -1,10 +1,10 @@
 import time, datetime as dt
 import pandas as pd, streamlit as st, plotly.graph_objects as go
-from doctorscan import config, engine as E, scanner, backtest, db, alerts
-from doctorscan.brokers.base import BrokerError
-from doctorscan.brokers.mock import MockBroker
-from doctorscan.brokers.angel_one import AngelOneBroker
-from doctorscan.universe import SYMBOLS
+import ds_config as config, ds_engine as E, ds_scanner as scanner, ds_backtest as backtest, ds_db as db, ds_alerts as alerts
+from ds_broker_base import BrokerError
+from ds_broker_mock import MockBroker
+from ds_broker_angel import AngelOneBroker
+from ds_universe import SYMBOLS
 
 st.set_page_config("DOCTOR SCAN", "🩺", layout="wide")
 st.markdown("""<style>.stApp{background:#0b0f17}[data-testid=stSidebar]{background:#0e1420}
