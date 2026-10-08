@@ -4,6 +4,7 @@ import ds_config as config, ds_engine as E, ds_scanner as scanner, ds_backtest a
 from ds_broker_base import BrokerError
 from ds_broker_mock import MockBroker
 from ds_broker_angel import AngelOneBroker
+from ds_broker_yf import YFinanceBroker
 from ds_universe import SYMBOLS
 
 st.set_page_config("DOCTOR SCAN", "🩺", layout="wide")
@@ -15,7 +16,7 @@ st.markdown("""<style>.stApp{background:#0b0f17}[data-testid=stSidebar]{backgrou
 
 @st.cache_resource
 def get_broker():
-    return AngelOneBroker() if config.PROVIDER == "ANGEL_ONE" else MockBroker()
+    return {"ANGEL_ONE": AngelOneBroker, "MOCK": MockBroker}.get(config.PROVIDER, YFinanceBroker)()
 broker = get_broker()
 ss = st.session_state
 ss.setdefault("prev", {}); ss.setdefault("alerts", [])
@@ -40,6 +41,14 @@ c1, c2 = st.columns([3, 2])
 c1.markdown(f"### 🩺 DOCTOR SCAN &nbsp; <span class='mono'>{now:%H:%M:%S} IST</span>", unsafe_allow_html=True)
 if broker.is_mock:
     c2.markdown("<span class='pill mock'>⚠ MOCK DATA — simulated, not exchange data</span>", unsafe_allow_html=True)
+elif broker.name == "YFINANCE":
+    if broker.state != "CONNECTED":
+        try: broker.login()
+        except BrokerError: pass
+    ok_ = broker.state == "CONNECTED"
+    c2.markdown(f"<span class='pill {'live' if ok_ else 'dead'}'>{'YAHOO FINANCE · REAL NSE DATA, DELAYED' if ok_ else 'YAHOO FINANCE UNAVAILABLE'}</span>", unsafe_allow_html=True)
+    if not ok_: st.error(broker.last_error or "Could not fetch data from Yahoo Finance."); st.stop()
+    st.caption("Yahoo's NSE 1-minute data is delayed (typically ~15 min) and limited to ~7 days, so RVOL uses only the prior sessions available (≤5), not 20.")
 else:
     with st.sidebar.expander("Angel One session", expanded=broker.state != "CONNECTED"):
         st.caption(f"State: {broker.state}")
@@ -101,7 +110,7 @@ if page == "Dashboard":
     sec = ctx["sectors"]; c.subheader("Strongest sectors"); c.dataframe(sec.head(4).round(2))
     d.subheader("Weakest sectors"); d.dataframe(sec.tail(4).round(2))
     st.subheader("Live alerts"); st.dataframe(pd.DataFrame(ss["alerts"][:10], columns=["time", "event", "symbol", "detail"]), hide_index=True)
-    st.caption(f"Scanner health: {broker.name} · state {broker.state} · {len(df)} symbols scanned")
+    st.caption(f"Scanner health: {broker.name} · state {broker.state} · {len(df)} symbols scanned · RVOL baseline sessions: {ctx['n_sessions']}" + (f" · skipped: {', '.join(ctx['skipped'])}" if ctx["skipped"] else ""))
 
 elif page == "Live Scanner":
     f = st.radio("Filter", ["All", "Bullish", "Bearish", "Explosive", "Strong", "Spurt", "High RVOL", "ORB Breakout", "Above VWAP", "Below VWAP"], horizontal=True)

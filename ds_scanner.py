@@ -1,19 +1,26 @@
 import numpy as np, pandas as pd
+from ds_broker_base import BrokerError
 import ds_engine as E
 from ds_universe import SECTOR_OF
 
 def scan(broker, symbols, cfg, upto=None):
     """Returns (rows DataFrame, ctx dict). `upto` truncates to N minutes (mock replay)."""
-    data = {}
+    data, skipped = {}, {}
+    if hasattr(broker, "prefetch"): broker.prefetch(symbols)
     for s in symbols:
-        df = broker.get_intraday(s)
+        try:
+            df = broker.get_intraday(s)
+            sess = broker.get_sessions(s, cfg.get("lookback", 20))
+        except BrokerError as e:
+            skipped[s] = str(e); continue
         if upto: df = df.iloc[:upto]
         if len(df) < 2: continue
-        sess = broker.get_sessions(s, cfg.get("lookback", 20))
         m = len(df)
         hist = [x["volume"].cumsum().iloc[m - 1] for x in sess if len(x) >= m]
         prev_close = float(sess[-1]["close"].iloc[-1]) if sess else float(df["open"].iloc[0])
         data[s] = (df, hist, prev_close)
+    if not data:
+        raise BrokerError(next(iter(skipped.values()), "No data returned for the selected symbols"))
     chg = {s: (v[0]["close"].iloc[-1] / v[2] - 1) * 100 for s, v in data.items()}
     b = E.breadth(chg.values())
     sec = E.sector_strength(pd.DataFrame({"symbol": list(chg), "sector": [SECTOR_OF.get(s, "OTHER") for s in chg],
@@ -44,7 +51,7 @@ def scan(broker, symbols, cfg, upto=None):
                          time=df["ts"].iloc[-1].strftime("%H:%M"), orb_high=rng and rng["high"], orb_low=rng and rng["low"],
                          atr=E.atr(df), turnover=turnover, lot=broker.lot_size(s)))
     out = pd.DataFrame(rows)
-    return out, dict(breadth=b, sectors=sec, candles={s: v[0] for s, v in data.items()})
+    return out, dict(breadth=b, sectors=sec, candles={s: v[0] for s, v in data.items()}, skipped=skipped, n_sessions=min((len(v[1]) for v in data.values()), default=0))
 
 def attach_options(broker, df):
     """Best-ranked contract for actionable signals (mock chain, or live if implemented)."""

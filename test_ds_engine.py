@@ -104,3 +104,13 @@ def test_angel_requires_connection_and_creds(monkeypatch):
     a = AngelOneBroker(smart_factory=FakeSmart)
     with pytest.raises(BrokerError): a.login()
     assert a.state == "ERROR"
+
+def test_yf_split_grid_and_sessions():
+    from ds_broker_yf import YFinanceBroker
+    rows = []
+    for day in ("2026-10-05", "2026-10-06", "2026-10-07"):
+        ix = pd.date_range(f"{day} 09:15", periods=370 if day != "2026-10-07" else 30, freq="1min", tz="Asia/Kolkata")
+        rows.append(pd.DataFrame(dict(Open=100.0, High=101.0, Low=99.0, Close=100.5, Volume=10.0), index=ix))
+    days = YFinanceBroker._split(pd.concat(rows))
+    assert [len(d) for d in days] == [375, 375, 30]           # prior sessions padded to full grid, today partial
+    assert {"ts", "open", "high", "low", "close", "volume"} <= set(days[0].columns)
